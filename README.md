@@ -62,6 +62,7 @@ microk8s kubectl get nodes --show-labels | grep nvidia
 
 ### 3. デプロイ
 
+#### 基本デプロイ（localhost アクセスのみ）
 ```bash
 # リポジトリをクローン
 git clone <repository-url>
@@ -71,14 +72,45 @@ cd dcgm-ui
 ./deploy.sh
 ```
 
+#### 外部アクセス対応デプロイ
+```bash
+# 外部からアクセス可能なデプロイ
+./deploy-external.sh
+```
+
 ### 4. アクセス
 
+#### ローカルアクセス
 ```bash
-# WebUIにアクセス
+# WebUIにアクセス（ポートフォワード）
 microk8s kubectl port-forward service/gpu-monitor-ui 8080:80 -n gpu-monitoring
 ```
 
 ブラウザで http://localhost:8080 にアクセス
+
+#### 外部アクセス
+
+**NodePort経由**
+```bash
+# ノードのIPアドレスを確認
+microk8s kubectl get nodes -o wide
+
+# ブラウザで http://<NODE_IP>:30080 にアクセス
+```
+
+**LoadBalancer経由（MetalLB有効時）**
+```bash
+# 外部IPを確認
+microk8s kubectl get svc gpu-monitor-ui-metallb -n gpu-monitoring
+
+# ブラウザで http://<EXTERNAL_IP>:8080 にアクセス
+```
+
+**HostNetwork経由**
+```bash
+# ホストネットワーク使用時
+# ブラウザで http://<NODE_IP>:8080 にアクセス
+```
 
 ## 📊 使用方法
 
