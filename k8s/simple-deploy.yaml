@@ -1,0 +1,343 @@
+# 簡易版GPU監視モニター（トラブルシューティング用）
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-monitoring
+  labels:
+    name: gpu-monitoring
+
+---
+# 簡易版WebUI（GPUなしでも動作）
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simple-gpu-monitor-ui
+  namespace: gpu-monitoring
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>GPU監視モニター（簡易版）</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                min-height: 100vh;
+            }
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            .card {
+                background: rgba(255, 255, 255, 0.9);
+                color: #333;
+                border-radius: 10px;
+                padding: 20px;
+                margin: 20px 0;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+            .status {
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 5px;
+            }
+            .success { background: #d4edda; border: 1px solid #c3e6cb; }
+            .warning { background: #fff3cd; border: 1px solid #ffeaa7; }
+            .error { background: #f8d7da; border: 1px solid #f5c6cb; }
+            .metric {
+                display: flex;
+                justify-content: space-between;
+                padding: 10px;
+                margin: 5px 0;
+                background: rgba(102, 126, 234, 0.1);
+                border-radius: 5px;
+            }
+            button {
+                background: #667eea;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin: 10px 5px;
+            }
+            button:hover {
+                background: #5a67d8;
+            }
+            pre {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                overflow-x: auto;
+                white-space: pre-wrap;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🖥️ GPU監視モニター（簡易版）</h1>
+            <p>システム診断とトラブルシューティング</p>
+
+            <div class="card">
+                <h3>📊 システム状態</h3>
+                <div id="system-status">
+                    <div class="status warning">
+                        <strong>⚠️ 診断中...</strong><br>
+                        システムの状態を確認しています。
+                    </div>
+                </div>
+                <button onclick="checkSystem()">🔄 システム診断</button>
+                <button onclick="checkMetrics()">📈 メトリクス確認</button>
+                <button onclick="checkGPU()">🔧 GPU確認</button>
+            </div>
+
+            <div class="card">
+                <h3>🔍 診断結果</h3>
+                <div id="diagnostic-results">
+                    <p>「システム診断」ボタンをクリックして診断を開始してください。</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📋 利用可能なメトリクス</h3>
+                <div id="metrics-list">
+                    <p>「メトリクス確認」ボタンをクリックしてメトリクスを確認してください。</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>🔧 トラブルシューティング</h3>
+                <div class="status warning">
+                    <strong>一般的な問題と解決方法:</strong><br>
+                    1. <strong>GPUアドオン未有効:</strong> <code>microk8s enable gpu</code><br>
+                    2. <strong>ノードラベル未設定:</strong> <code>microk8s kubectl label nodes --all accelerator=nvidia</code><br>
+                    3. <strong>NVIDIA ドライバー未インストール:</strong> <code>nvidia-smi</code> で確認<br>
+                    4. <strong>ポッド起動失敗:</strong> <code>microk8s kubectl describe pods -n gpu-monitoring</code>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const prometheusUrl = '/api/prometheus';
+
+            async function checkSystem() {
+                const statusDiv = document.getElementById('system-status');
+                const resultsDiv = document.getElementById('diagnostic-results');
+                
+                statusDiv.innerHTML = '<div class="status warning"><strong>🔍 診断中...</strong></div>';
+                
+                let results = [];
+                
+                // Prometheusの接続確認
+                try {
+                    const response = await fetch(`${prometheusUrl}/api/v1/query?query=up`);
+                    if (response.ok) {
+                        results.push('✅ Prometheus接続: 正常');
+                        statusDiv.innerHTML = '<div class="status success"><strong>✅ Prometheus接続正常</strong></div>';
+                    } else {
+                        results.push('❌ Prometheus接続: 失敗');
+                        statusDiv.innerHTML = '<div class="status error"><strong>❌ Prometheus接続失敗</strong></div>';
+                    }
+                } catch (error) {
+                    results.push('❌ Prometheus接続: エラー - ' + error.message);
+                    statusDiv.innerHTML = '<div class="status error"><strong>❌ Prometheus接続エラー</strong></div>';
+                }
+
+                // DCGM Exporterの確認
+                try {
+                    const response = await fetch(`${prometheusUrl}/api/v1/query?query=up{job="dcgm-exporter"}`);
+                    const data = await response.json();
+                    if (data.data && data.data.result && data.data.result.length > 0) {
+                        results.push('✅ DCGM Exporter: 動作中');
+                    } else {
+                        results.push('❌ DCGM Exporter: 未検出');
+                    }
+                } catch (error) {
+                    results.push('❌ DCGM Exporter: 確認エラー');
+                }
+
+                resultsDiv.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+            }
+
+            async function checkMetrics() {
+                const metricsDiv = document.getElementById('metrics-list');
+                metricsDiv.innerHTML = '<p>🔍 メトリクスを確認中...</p>';
+
+                try {
+                    const response = await fetch(`${prometheusUrl}/api/v1/label/__name__/values`);
+                    const data = await response.json();
+                    
+                    if (data.data) {
+                        const dcgmMetrics = data.data.filter(m => m.includes('DCGM') || m.includes('dcgm'));
+                        const gpuMetrics = data.data.filter(m => m.toLowerCase().includes('gpu'));
+                        
+                        let output = '<h4>📊 DCGM関連メトリクス (' + dcgmMetrics.length + '個):</h4>';
+                        if (dcgmMetrics.length > 0) {
+                            output += '<pre>' + dcgmMetrics.join('\n') + '</pre>';
+                        } else {
+                            output += '<p class="status error">❌ DCGMメトリクスが見つかりません</p>';
+                        }
+                        
+                        output += '<h4>🔧 GPU関連メトリクス (' + gpuMetrics.length + '個):</h4>';
+                        if (gpuMetrics.length > 0) {
+                            output += '<pre>' + gpuMetrics.slice(0, 20).join('\n');
+                            if (gpuMetrics.length > 20) output += '\n... (' + (gpuMetrics.length - 20) + '個省略)';
+                            output += '</pre>';
+                        } else {
+                            output += '<p class="status error">❌ GPUメトリクスが見つかりません</p>';
+                        }
+                        
+                        metricsDiv.innerHTML = output;
+                    } else {
+                        metricsDiv.innerHTML = '<p class="status error">❌ メトリクス一覧の取得に失敗しました</p>';
+                    }
+                } catch (error) {
+                    metricsDiv.innerHTML = '<p class="status error">❌ エラー: ' + error.message + '</p>';
+                }
+            }
+
+            async function checkGPU() {
+                const resultsDiv = document.getElementById('diagnostic-results');
+                
+                try {
+                    // GPU使用率メトリクスの確認
+                    const queries = [
+                        'DCGM_FI_DEV_GPU_UTIL',
+                        'dcgm_gpu_utilization',
+                        'DCGM_FI_DEV_FB_TOTAL',
+                        'dcgm_fb_total'
+                    ];
+                    
+                    let results = ['🔧 GPU メトリクス確認結果:'];
+                    
+                    for (const query of queries) {
+                        try {
+                            const response = await fetch(`${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`);
+                            const data = await response.json();
+                            
+                            if (data.data && data.data.result && data.data.result.length > 0) {
+                                results.push(`✅ ${query}: ${data.data.result.length}個のサンプル`);
+                                
+                                // 最初のサンプルの詳細を表示
+                                const sample = data.data.result[0];
+                                results.push(`   ノード: ${sample.metric.node || sample.metric.instance || 'unknown'}`);
+                                results.push(`   GPU: ${sample.metric.gpu || sample.metric.GPU || sample.metric.device || 'unknown'}`);
+                                results.push(`   値: ${sample.value[1]}`);
+                            } else {
+                                results.push(`❌ ${query}: データなし`);
+                            }
+                        } catch (error) {
+                            results.push(`❌ ${query}: エラー`);
+                        }
+                    }
+                    
+                    resultsDiv.innerHTML = '<pre>' + results.join('\n') + '</pre>';
+                } catch (error) {
+                    resultsDiv.innerHTML = '<p class="status error">❌ GPU確認エラー: ' + error.message + '</p>';
+                }
+            }
+
+            // 自動診断開始
+            window.addEventListener('load', () => {
+                setTimeout(checkSystem, 1000);
+            });
+        </script>
+    </body>
+    </html>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-gpu-monitor-ui
+  namespace: gpu-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simple-gpu-monitor-ui
+  template:
+    metadata:
+      labels:
+        app: simple-gpu-monitor-ui
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: ui-config
+          mountPath: /usr/share/nginx/html
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      volumes:
+      - name: ui-config
+        configMap:
+          name: simple-gpu-monitor-ui
+      - name: nginx-config
+        configMap:
+          name: simple-nginx-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simple-nginx-config
+  namespace: gpu-monitoring
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+        
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+        }
+        
+        location /api/prometheus/ {
+            proxy_pass http://prometheus:9090/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+        }
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-gpu-monitor-ui
+  namespace: gpu-monitoring
+spec:
+  selector:
+    app: simple-gpu-monitor-ui
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30090
+      protocol: TCP
+      name: http
