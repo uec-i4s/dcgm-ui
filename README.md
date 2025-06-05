@@ -9,9 +9,11 @@ NVIDIA DCGM Exporterを使用したKubernetesクラスターのGPU使用量監�
 ## 🚀 特徴
 
 - **リアルタイム監視**: 30秒間隔でGPUメトリクスを自動更新
+- **ハードウェア情報**: GPU種類、スペック、個数の詳細表示
 - **ノード別表示**: 各ノードのGPU使用状況を個別に表示
 - **ポッド別表示**: GPU使用中のポッドごとの使用率を表示
 - **詳細メトリクス**: GPU使用率、メモリ、電力、温度を監視
+- **スペック情報**: Compute Capability、SM数、メモリバス幅、クロック周波数
 - **レスポンシブUI**: モバイルデバイスにも対応した美しいインターフェース
 - **簡単デプロイ**: ワンコマンドでの簡単なデプロイメント
 
@@ -132,11 +134,26 @@ microk8s kubectl port-forward service/prometheus 9090:9090 -n gpu-monitoring
 
 ### 利用可能なメトリクス
 
+#### パフォーマンスメトリクス
 - `DCGM_FI_DEV_GPU_UTIL`: GPU使用率 (%)
 - `DCGM_FI_DEV_FB_USED`: GPU メモリ使用量 (MB)
 - `DCGM_FI_DEV_FB_TOTAL`: GPU メモリ総量 (MB)
 - `DCGM_FI_DEV_POWER_USAGE`: 電力使用量 (W)
 - `DCGM_FI_DEV_GPU_TEMP`: GPU温度 (°C)
+
+#### ハードウェア情報メトリクス
+- `DCGM_FI_DEV_NAME`: GPU名
+- `DCGM_FI_DEV_BRAND`: GPUブランド
+- `DCGM_FI_DEV_SERIAL`: シリアル番号
+- `DCGM_FI_DEV_UUID`: GPU UUID
+- `DCGM_FI_DEV_PCI_BUSID`: PCI Bus ID
+- `DCGM_FI_DEV_CC_MAJOR/MINOR`: Compute Capability
+- `DCGM_FI_DEV_MULTIPROCESSOR_COUNT`: SM（ストリーミングマルチプロセッサ）数
+- `DCGM_FI_DEV_MEMORY_BUS_WIDTH`: メモリバス幅
+- `DCGM_FI_DEV_MAX_MEM_CLOCK`: 最大メモリクロック
+- `DCGM_FI_DEV_MAX_SM_CLOCK`: 最大SMクロック
+- `DCGM_FI_DEV_POWER_MGMT_LIMIT`: 電力制限
+- `DCGM_FI_DRIVER_VERSION`: NVIDIAドライバーバージョン
 
 ## 🔧 カスタマイズ
 
