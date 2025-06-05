@@ -4,31 +4,176 @@ NVIDIA DCGM Exporterを使用したKubernetesクラスターのGPU使用量監�
 
 ## 概要
 
-このプロジェクトは、Kubernetesクラスター上でGPU使用量をノードとポッドごとに監視するためのシステムです。
+このプロジェクトは、Kubernetesクラスター上でGPU使用量をノードとポッドごとに監視するためのシステムです。リアルタイムでGPU使用率、メモリ使用量、電力消費、温度などの詳細なメトリクスを可視化します。
 
-## 構成要素
+## 🚀 特徴
 
-- DCGM Exporter: GPUメトリクスの収集
-- Prometheus: メトリクスの保存
-- Grafana: 可視化ダッシュボード
-- Web UI: 簡易的な監視インターフェース
+- **リアルタイム監視**: 30秒間隔でGPUメトリクスを自動更新
+- **ノード別表示**: 各ノードのGPU使用状況を個別に表示
+- **ポッド別表示**: GPU使用中のポッドごとの使用率を表示
+- **詳細メトリクス**: GPU使用率、メモリ、電力、温度を監視
+- **レスポンシブUI**: モバイルデバイスにも対応した美しいインターフェース
+- **簡単デプロイ**: ワンコマンドでの簡単なデプロイメント
 
-## 使用方法
+## 🏗️ 構成要素
 
-1. Kubernetesクラスターにデプロイ
-```bash
-kubectl apply -f k8s/
-```
+- **DCGM Exporter**: NVIDIA GPUメトリクスの収集（nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.1-ubi9）
+- **Prometheus**: メトリクスの保存と管理
+- **Web UI**: 直感的な監視インターフェース（Nginx + JavaScript）
 
-2. Web UIにアクセス
-```bash
-kubectl port-forward service/gpu-monitor-ui 8080:80
-```
+## 📋 必要な要件
 
-3. ブラウザで http://localhost:8080 にアクセス
-
-## 必要な要件
-
-- Kubernetesクラスター
+- Kubernetesクラスター（v1.20以上推奨）
 - NVIDIA GPU搭載ノード
 - NVIDIA Device Plugin for Kubernetes
+- kubectl コマンドラインツール
+
+## 🚀 クイックスタート
+
+### 1. 前提条件の確認
+
+```bash
+# GPUノードの確認
+kubectl get nodes --show-labels | grep nvidia
+
+# NVIDIA Device Pluginの確認
+kubectl get pods -n kube-system | grep nvidia
+```
+
+NVIDIA Device Pluginが未インストールの場合：
+```bash
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.1/nvidia-device-plugin.yml
+```
+
+### 2. デプロイ
+
+```bash
+# リポジトリをクローン
+git clone <repository-url>
+cd dcgm-ui
+
+# ワンコマンドデプロイ
+./deploy.sh
+```
+
+### 3. アクセス
+
+```bash
+# WebUIにアクセス
+kubectl port-forward service/gpu-monitor-ui 8080:80 -n gpu-monitoring
+```
+
+ブラウザで http://localhost:8080 にアクセス
+
+## 📊 使用方法
+
+### WebUI機能
+
+- **クラスター概要**: 総ノード数、GPU数、使用中ポッド数の表示
+- **ノード詳細**: 各ノードのGPU使用状況、メモリ、電力、温度
+- **ポッド監視**: GPU使用中のポッドごとの使用率
+- **自動更新**: 30秒間隔での自動データ更新
+- **手動更新**: 右下の更新ボタンで即座にデータ更新
+
+### Prometheusへの直接アクセス
+
+```bash
+kubectl port-forward service/prometheus 9090:9090 -n gpu-monitoring
+```
+
+ブラウザで http://localhost:9090 にアクセス
+
+### 利用可能なメトリクス
+
+- `DCGM_FI_DEV_GPU_UTIL`: GPU使用率 (%)
+- `DCGM_FI_DEV_FB_USED`: GPU メモリ使用量 (MB)
+- `DCGM_FI_DEV_FB_TOTAL`: GPU メモリ総量 (MB)
+- `DCGM_FI_DEV_POWER_USAGE`: 電力使用量 (W)
+- `DCGM_FI_DEV_GPU_TEMP`: GPU温度 (°C)
+
+## 🔧 カスタマイズ
+
+### メトリクス更新間隔の変更
+
+[`web-ui/app.js`](web-ui/app.js:4) の `refreshInterval` を変更：
+```javascript
+this.refreshInterval = 15000; // 15秒に変更
+```
+
+### Prometheusの設定変更
+
+[`k8s/prometheus.yaml`](k8s/prometheus.yaml:8) の `scrape_interval` を変更：
+```yaml
+global:
+  scrape_interval: 10s  # 10秒に変更
+```
+
+### リソース制限の調整
+
+各コンポーネントの [`resources`](k8s/prometheus.yaml:75) セクションを編集：
+```yaml
+resources:
+  requests:
+    cpu: 500m
+    memory: 1000Mi
+  limits:
+    cpu: 1000m
+    memory: 2000Mi
+```
+
+## 🗑️ アンインストール
+
+```bash
+./cleanup.sh
+```
+
+## 🔍 トラブルシューティング
+
+詳細なトラブルシューティングガイドは [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) を参照してください。
+
+### よくある問題
+
+1. **DCGM Exporterが起動しない**
+   - GPUノードのラベル設定を確認
+   - NVIDIA Device Pluginのインストール状況を確認
+
+2. **データが表示されない**
+   - Prometheusのターゲット状態を確認
+   - ネットワーク接続を確認
+
+3. **WebUIにアクセスできない**
+   - ポートフォワードの設定を確認
+   - ポッドの状態を確認
+
+## 📁 プロジェクト構造
+
+```
+dcgm-ui/
+├── README.md                 # このファイル
+├── TROUBLESHOOTING.md        # トラブルシューティングガイド
+├── deploy.sh                 # デプロイスクリプト
+├── cleanup.sh                # 削除スクリプト
+├── k8s/                      # Kubernetes設定ファイル
+│   ├── namespace.yaml        # 名前空間定義
+│   ├── dcgm-exporter.yaml    # DCGM Exporter設定
+│   ├── prometheus.yaml       # Prometheus設定
+│   └── web-ui.yaml          # WebUI設定
+└── web-ui/                   # WebUIソースコード
+    ├── index.html           # HTMLファイル
+    └── app.js               # JavaScriptファイル
+```
+
+## 🤝 貢献
+
+プルリクエストや課題報告を歓迎します。
+
+## 📄 ライセンス
+
+このプロジェクトはMITライセンスの下で公開されています。
+
+## 🔗 関連リンク
+
+- [NVIDIA DCGM](https://developer.nvidia.com/dcgm)
+- [NVIDIA Device Plugin for Kubernetes](https://github.com/NVIDIA/k8s-device-plugin)
+- [Prometheus](https://prometheus.io/)
+- [Kubernetes](https://kubernetes.io/)
