@@ -23,44 +23,59 @@ NVIDIA DCGM Exporterを使用したKubernetesクラスターのGPU使用量監�
 
 ## 📋 必要な要件
 
-- Kubernetesクラスター（v1.20以上推奨）
-- NVIDIA GPU搭載ノード
-- NVIDIA Device Plugin for Kubernetes
-- kubectl コマンドラインツール
+- **MicroK8s**（v1.20以上推奨）
+- **NVIDIA GPU搭載ノード**
+- **NVIDIA ドライバー**（ホストにインストール済み）
+- **microk8s コマンドラインツール**
 
 ## 🚀 クイックスタート
 
-### 1. 前提条件の確認
+### 1. MicroK8s環境の準備
 
 ```bash
+# MicroK8sのインストール（Ubuntu/Debian）
+sudo snap install microk8s --classic
+
+# 現在のユーザーをmicrok8sグループに追加
+sudo usermod -a -G microk8s $USER
+sudo chown -f -R $USER ~/.kube
+newgrp microk8s
+
+# MicroK8sの状態確認
+microk8s status
+```
+
+### 2. 前提条件の確認
+
+```bash
+# GPUアドオンの確認
+microk8s status | grep gpu
+
+# 必要なアドオンが無効の場合は有効化
+microk8s enable gpu
+microk8s enable dns
+microk8s enable storage
+
 # GPUノードの確認
-kubectl get nodes --show-labels | grep nvidia
-
-# NVIDIA Device Pluginの確認
-kubectl get pods -n kube-system | grep nvidia
+microk8s kubectl get nodes --show-labels | grep nvidia
 ```
 
-NVIDIA Device Pluginが未インストールの場合：
-```bash
-kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.1/nvidia-device-plugin.yml
-```
-
-### 2. デプロイ
+### 3. デプロイ
 
 ```bash
 # リポジトリをクローン
 git clone <repository-url>
 cd dcgm-ui
 
-# ワンコマンドデプロイ
+# ワンコマンドデプロイ（MicroK8s対応）
 ./deploy.sh
 ```
 
-### 3. アクセス
+### 4. アクセス
 
 ```bash
 # WebUIにアクセス
-kubectl port-forward service/gpu-monitor-ui 8080:80 -n gpu-monitoring
+microk8s kubectl port-forward service/gpu-monitor-ui 8080:80 -n gpu-monitoring
 ```
 
 ブラウザで http://localhost:8080 にアクセス
@@ -78,7 +93,7 @@ kubectl port-forward service/gpu-monitor-ui 8080:80 -n gpu-monitoring
 ### Prometheusへの直接アクセス
 
 ```bash
-kubectl port-forward service/prometheus 9090:9090 -n gpu-monitoring
+microk8s kubectl port-forward service/prometheus 9090:9090 -n gpu-monitoring
 ```
 
 ブラウザで http://localhost:9090 にアクセス

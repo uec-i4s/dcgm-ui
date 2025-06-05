@@ -1,4 +1,4 @@
-# トラブルシューティングガイド
+# トラブルシューティングガイド（MicroK8s対応）
 
 ## 一般的な問題と解決方法
 
@@ -6,34 +6,49 @@
 
 #### 症状
 ```bash
-kubectl get pods -n gpu-monitoring
+microk8s kubectl get pods -n gpu-monitoring
 # dcgm-exporter-xxxxx が Pending または CrashLoopBackOff 状態
 ```
 
 #### 原因と解決方法
 
-**原因1: GPUノードが見つからない**
+**原因1: MicroK8sのGPUアドオンが無効**
+```bash
+# MicroK8sの状態確認
+microk8s status
+
+# GPUアドオンが無効の場合は有効化
+microk8s enable gpu
+
+# GPUアドオンの確認
+microk8s kubectl get pods -n kube-system | grep nvidia
+```
+
+**原因2: GPUノードが見つからない**
 ```bash
 # ノードにGPUラベルが設定されているか確認
-kubectl get nodes --show-labels | grep nvidia
+microk8s kubectl get nodes --show-labels | grep nvidia
 
 # ラベルが設定されていない場合は追加
-kubectl label nodes <node-name> accelerator=nvidia
+microk8s kubectl label nodes --all accelerator=nvidia --overwrite
 ```
 
-**原因2: NVIDIA Device Pluginが未インストール**
+**原因3: NVIDIA ドライバーの問題**
 ```bash
-# NVIDIA Device Pluginをインストール
-kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.1/nvidia-device-plugin.yml
+# ホストでNVIDIA ドライバーの確認
+nvidia-smi
+
+# MicroK8sでGPUリソースの確認
+microk8s kubectl describe nodes | grep -A 5 "nvidia.com/gpu"
 ```
 
-**原因3: 権限不足**
+**原因4: 権限不足**
 ```bash
 # ログを確認
-kubectl logs -l app=dcgm-exporter -n gpu-monitoring
+microk8s kubectl logs -l app=dcgm-exporter -n gpu-monitoring
 
 # SecurityContextが適切に設定されているか確認
-kubectl describe pod -l app=dcgm-exporter -n gpu-monitoring
+microk8s kubectl describe pod -l app=dcgm-exporter -n gpu-monitoring
 ```
 
 ### 2. Prometheusがメトリクスを収集できない
@@ -47,16 +62,16 @@ kubectl describe pod -l app=dcgm-exporter -n gpu-monitoring
 **ステップ1: Prometheusの状態確認**
 ```bash
 # Prometheusポッドの状態確認
-kubectl get pods -l app=prometheus -n gpu-monitoring
+microk8s kubectl get pods -l app=prometheus -n gpu-monitoring
 
 # Prometheusのログ確認
-kubectl logs -l app=prometheus -n gpu-monitoring
+microk8s kubectl logs -l app=prometheus -n gpu-monitoring
 ```
 
 **ステップ2: ターゲット確認**
 ```bash
 # Prometheusにアクセス
-kubectl port-forward service/prometheus 9090:9090 -n gpu-monitoring
+microk8s kubectl port-forward service/prometheus 9090:9090 -n gpu-monitoring
 
 # ブラウザで http://localhost:9090/targets にアクセス
 # dcgm-exporterターゲットが "UP" 状態か確認
@@ -65,10 +80,13 @@ kubectl port-forward service/prometheus 9090:9090 -n gpu-monitoring
 **ステップ3: ネットワーク確認**
 ```bash
 # サービスの確認
-kubectl get svc -n gpu-monitoring
+microk8s kubectl get svc -n gpu-monitoring
 
 # エンドポイントの確認
-kubectl get endpoints -n gpu-monitoring
+microk8s kubectl get endpoints -n gpu-monitoring
+
+# MicroK8s固有のネットワーク確認
+microk8s status | grep dns
 ```
 
 ### 3. WebUIにアクセスできない
