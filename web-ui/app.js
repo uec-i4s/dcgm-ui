@@ -72,6 +72,17 @@ class GPUMonitor {
     }
 
     async fetchHardwareInfo() {
+        // まず利用可能なメトリクスを確認
+        try {
+            const response = await fetch(`${this.prometheusUrl}/api/v1/label/__name__/values`);
+            const data = await response.json();
+            const availableMetrics = data.data || [];
+            console.log('利用可能なメトリクス:', availableMetrics.filter(m => m.includes('DCGM')));
+        } catch (error) {
+            console.warn('メトリクス一覧の取得に失敗:', error);
+        }
+
+        // 一般的なDCGMメトリクス名を試行
         const queries = [
             'DCGM_FI_DRIVER_VERSION',
             'DCGM_FI_NVML_VERSION',
@@ -92,7 +103,16 @@ class GPUMonitor {
             'DCGM_FI_DEV_MAX_SM_CLOCK',
             'DCGM_FI_DEV_POWER_MGMT_LIMIT',
             'DCGM_FI_DEV_POWER_MGMT_LIMIT_MIN',
-            'DCGM_FI_DEV_POWER_MGMT_LIMIT_MAX'
+            'DCGM_FI_DEV_POWER_MGMT_LIMIT_MAX',
+            // 代替メトリクス名も試行
+            'dcgm_gpu_utilization',
+            'dcgm_fb_used',
+            'dcgm_fb_total',
+            'dcgm_power_usage',
+            'dcgm_gpu_temp',
+            'dcgm_sm_clock',
+            'dcgm_mem_clock',
+            'dcgm_sm_occupancy'
         ];
 
         const results = {};
@@ -100,7 +120,12 @@ class GPUMonitor {
             try {
                 const response = await fetch(`${this.prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`);
                 const data = await response.json();
-                results[query] = data.data.result;
+                if (data.data && data.data.result && data.data.result.length > 0) {
+                    results[query] = data.data.result;
+                    console.log(`メトリクス ${query} が利用可能:`, data.data.result.length, '個のサンプル');
+                } else {
+                    results[query] = [];
+                }
             } catch (error) {
                 console.warn(`ハードウェア情報クエリ ${query} の取得に失敗:`, error);
                 results[query] = [];
@@ -215,11 +240,13 @@ class GPUMonitor {
     processHardwareData(results) {
         const hardware = new Map();
 
-        // GPU名でハードウェア情報を初期化
-        results['DCGM_FI_DEV_NAME']?.forEach(metric => {
+        // 利用可能なメトリクスからGPU情報を初期化
+        // まずGPU使用率メトリクスからGPUを特定
+        const gpuUtilMetrics = results['DCGM_FI_DEV_GPU_UTIL'] || results['dcgm_gpu_utilization'] || [];
+        
+        gpuUtilMetrics.forEach(metric => {
             const node = metric.metric.node || metric.metric.instance || 'unknown';
-            const gpu = metric.metric.gpu || metric.metric.GPU || '0';
-            const gpuName = metric.value[1] || 'Unknown GPU';
+            const gpu = metric.metric.gpu || metric.metric.GPU || metric.metric.device || '0';
             const nodeKey = `${node}`;
             
             if (!hardware.has(nodeKey)) {
@@ -233,7 +260,7 @@ class GPUMonitor {
 
             hardware.get(nodeKey).gpus.set(gpu, {
                 id: gpu,
-                name: gpuName,
+                name: 'GPU ' + gpu, // デフォルト名
                 brand: '',
                 serial: '',
                 uuid: '',
@@ -250,6 +277,32 @@ class GPUMonitor {
                 powerLimitMin: 0,
                 powerLimitMax: 0
             });
+        });
+
+        // GPU名の設定（複数のメトリクス名を試行）
+        const nameMetrics = results['DCGM_FI_DEV_NAME'] || [];
+        nameMetrics.forEach(metric => {
+            const node = metric.metric.node || metric.metric.instance || 'unknown';
+            const gpu = metric.metric.gpu || metric.metric.GPU || metric.metric.device || '0';
+            const gpuName = metric.value[1] || 'Unknown GPU';
+            const nodeKey = `${node}`;
+            
+            if (hardware.has(nodeKey) && hardware.get(nodeKey).gpus.has(gpu)) {
+                hardware.get(nodeKey).gpus.get(gpu).name = gpuName;
+            }
+        });
+
+        // メモリ総量の設定（複数のメトリクス名を試行）
+        const memoryMetrics = results['DCGM_FI_DEV_FB_TOTAL'] || results['dcgm_fb_total'] || [];
+        memoryMetrics.forEach(metric => {
+            const node = metric.metric.node || metric.metric.instance || 'unknown';
+            const gpu = metric.metric.gpu || metric.metric.GPU || metric.metric.device || '0';
+            const memoryTotal = parseFloat(metric.value[1]) || 0;
+            const nodeKey = `${node}`;
+            
+            if (hardware.has(nodeKey) && hardware.get(nodeKey).gpus.has(gpu)) {
+                hardware.get(nodeKey).gpus.get(gpu).memoryTotal = memoryTotal;
+            }
         });
 
         // 各種ハードウェア情報を追加
