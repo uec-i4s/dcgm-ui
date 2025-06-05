@@ -570,8 +570,25 @@ metadata:
 spec:
   selector:
     app: gpu-monitor-ui
-  type: LoadBalancer
+  type: NodePort
   ports:
     - port: 80
       targetPort: 80
+      nodePort: 30080
       protocol: TCP
+      name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-monitor-ui-external
+  namespace: gpu-monitoring
+spec:
+  selector:
+    app: gpu-monitor-ui
+  type: LoadBalancer
+  ports:
+    - port: 8080
+      targetPort: 80
+      protocol: TCP
+      name: http
